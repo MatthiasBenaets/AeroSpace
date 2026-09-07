@@ -409,9 +409,42 @@ Though you can disable normalizations by placing these lines to your config:
 ----
 enable-normalization-flatten-containers = false
 enable-normalization-opposite-orientation-for-nested-containers = false
+enable-normalization-binary-tree = false
 ----
 
 Unless you're hardcore i3 user who knows what they are doing, it's recommended to keep the normalizations enabled.
+
+An optional third normalization, "binary tree" (off by default), can be enabled with
+`enable-normalization-binary-tree`.
+When enabled, it overrides the opposite-orientation normalization and applies two rules to every tiling container:
+
+. The tree is forced to be binary: any container with more than two children has its rightmost siblings
+  recursively wrapped into new sub-containers until exactly two remain at each level.
+. Each container is oriented based on the aspect ratio of its allotted rect: `horizontal` if width > height,
+  `vertical` otherwise. The rect is computed top-down starting from the workspace's visible rect, split in
+  half (by children weights) at every level.
+
+This means that on a typical wide monitor, new windows will split horizontally first, and deeper containers
+will automatically flip to vertical when their available space becomes taller than wide. The result is a
+bspwm/i3-style BSP layout where splits always happen along the longest dimension.
+
+[.lead]
+*Example*
+
+With four windows on a 1920×1080 monitor, the tree becomes:
+
+----
+h_tiles
+├── window 1
+└── v_tiles
+    ├── window 2
+    └── h_tiles
+        ├── window 3
+        └── window 4
+----
+
+The root is horizontal (wide monitor), the second level is vertical (the right half is tall), and the
+third level is horizontal again (that bottom-right quadrant is wide). Splits always follow the longest axis.
 
 [#floating-windows]
 === Floating windows

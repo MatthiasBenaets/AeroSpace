@@ -226,6 +226,17 @@ private func unbindAndGetBindingDataForNewTilingWindow(_ workspace: Workspace, w
     window?.unbindFromParent() // It's important to unbind to get correct data from below
     let mruWindow = workspace.mostRecentWindowRecursive
     if let mruWindow, let tilingParent = mruWindow.parent as? TilingContainer {
+        // BSP mode: when BSP is enabled, wrap the MRU window and the new window
+        // in a new binary container oriented by aspect ratio. This gives i3/bspwm
+        // behavior where each new window splits the previously focused window.
+        if config.enableNormalizationBinaryTree {
+            let binding = BindingData(
+                parent: tilingParent,
+                adaptiveWeight: WEIGHT_AUTO,
+                index: mruWindow.ownIndex.orDie() + 1,
+            )
+            return createBspWrapperForMruAndNew(window, mruWindow: mruWindow, binding: binding)
+        }
         return BindingData(
             parent: tilingParent,
             adaptiveWeight: WEIGHT_AUTO,
@@ -238,6 +249,47 @@ private func unbindAndGetBindingDataForNewTilingWindow(_ workspace: Workspace, w
             index: INDEX_BIND_LAST,
         )
     }
+}
+
+/// When BSP mode is on, wrap the MRU window and prepare for the new window
+/// to be placed beside it. The container orientation is determined by the
+/// MRU window's aspect ratio (longest dimension first).
+///
+/// Returns a BindingData so the caller can bind the new window into the wrapper.
+@MainActor
+private func createBspWrapperForMruAndNew(
+    _ newWindow: Window?,
+    mruWindow: Window,
+    binding: BindingData,
+) -> BindingData {
+    // Determine the container's parent and position
+    let parent = binding.parent
+    let index = binding.index
+    let weight = binding.adaptiveWeight
+
+    // Determine orientation from the MRU window's last applied layout rect.
+    // This reflects the window's current on-screen size from the previous
+    // layout pass. Falls back to landscape (wide monitor assumption).
+    let mruRect = mruWindow.lastAppliedLayoutPhysicalRect
+        ?? mruWindow.lastAppliedLayoutVirtualRect
+        ?? Rect(topLeftX: 0, topLeftY: 0, width: 1920, height: 1080)
+    let orientation: Orientation = mruRect.isLandscape ? Orientation.h : Orientation.v
+
+    // Create wrapper container (will hold MRU + new window)
+    let wrapper: TilingContainer = orientation == .h
+        ? TilingContainer.newHTiles(parent: parent, adaptiveWeight: weight, index: index)
+        : TilingContainer.newVTiles(parent: parent, adaptiveWeight: weight, index: index)
+
+    // Move MRU window into wrapper at position 0
+    mruWindow.unbindFromParent()
+    mruWindow.bind(to: wrapper, adaptiveWeight: WEIGHT_AUTO, index: 0)
+
+    // The new window will be bound at index 1 (or last) by the caller
+    return BindingData(
+        parent: wrapper,
+        adaptiveWeight: WEIGHT_AUTO,
+        index: 1,
+    )
 }
 
 @MainActor
