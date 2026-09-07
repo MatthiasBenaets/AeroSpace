@@ -2,7 +2,7 @@ import AppKit
 import Common
 
 final class TilingContainer: TreeNode, NonLeafTreeNodeObject { // todo consider renaming to GenericContainer
-    fileprivate var _orientation: Orientation
+    var _orientation: Orientation
     var orientation: Orientation { _orientation }
     var layout: Layout
 
@@ -52,6 +52,11 @@ extension TilingContainer {
         for child in children {
             (child as? TilingContainer)?.normalizeOppositeOrientationForNestedContainers()
         }
+    }
+
+    /// Set orientation directly (used by BSP normalization).
+    func setOrientation(_ newValue: Orientation) {
+        _orientation = newValue
     }
 }
 

@@ -33,6 +33,22 @@ struct MoveCommand: Command {
                             return .succ
                     }
                 } else {
+                    // With binary-tree normalization, a window at the workspace edge (nothing
+                    // in `direction` anywhere up the tree) can never bubble out — normalization
+                    // immediately re-nests it. Treat the edge as a hard boundary so the
+                    // boundaries action (stop/fail/create) applies correctly.
+                    if await config.enableNormalizationBinaryTree
+                        && currentWindow.closestParent(hasChildrenInDirection: direction, withLayout: nil) == nil
+                    {
+                        return hitWorkspaceBoundaries(
+                            currentWindow,
+                            target.workspace,
+                            io,
+                            args,
+                            direction,
+                            env,
+                        )
+                    }
                     return moveOut(tilingWindow: currentWindow, direction: direction, io, args, env)
                 }
             case .floatingWindowsContainer: // floating window
