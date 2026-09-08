@@ -14,9 +14,11 @@ struct CloseCommand: Command {
         if await args.quitIfLastWindow.andAsync({ @MainActor @Sendable in (try? await window.macAppUnsafe.getAxWindowsCount(.nonCancellable)) == 1 }) {
             let app = window.macAppUnsafe
             if app.nsApp.terminate() {
+                // Capture the parent container for BSP focus tracking
+                TilingContainer.__bspClosingParent = window.parent as? TilingContainer
                 for workspace in Workspace.all {
-                    for window in workspace.allLeafWindowsRecursive where window.app.pid == app.pid {
-                        (window as! MacWindow).garbageCollect(skipClosedWindowsCache: true)
+                    for w in workspace.allLeafWindowsRecursive where w.app.pid == app.pid {
+                        (w as! MacWindow).garbageCollect(skipClosedWindowsCache: true)
                     }
                 }
                 return .succ
@@ -24,6 +26,10 @@ struct CloseCommand: Command {
                 return .fail(io.err("Failed to quit '\(window.app.name ?? "Unknown app")'"))
             }
         } else {
+            // Capture the parent container of the window BEFORE closeAxWindow unbinds it.
+            // During BSP normalization, we use this to focus the sibling that grows
+            // into the freed space (instead of relying on stale MRU order).
+            TilingContainer.__bspClosingParent = window.parent as? TilingContainer
             window.closeAxWindow()
             return .succ
         }

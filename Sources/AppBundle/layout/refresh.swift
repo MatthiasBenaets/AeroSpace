@@ -116,6 +116,16 @@ func refreshModel_nonCancellable() async {
         Workspace.garbageCollectUnusedWorkspaces()
         await checkOnFocusChangedCallbacks_nonCancellable()
         normalizeContainers()
+        // In BSP mode, after a window is removed the MRU stack may be stale.
+        // If normalization found the window that grows into the freed space,
+        // focus it directly instead of relying on the stale MRU order.
+        if config.enableNormalizationBinaryTree {
+            if let override = TilingContainer.__bspFocusOverride {
+                _ = (override as? Window)?.focusWindow()
+                TilingContainer.__bspFocusOverride = nil
+            }
+            TilingContainer.__bspClosingParent = nil
+        }
     }
 }
 
