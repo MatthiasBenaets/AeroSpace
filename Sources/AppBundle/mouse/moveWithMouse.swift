@@ -32,7 +32,7 @@ private func moveWithMouse(_ window: Window) async throws { // todo cover with t
         case .macosFullscreenWindowsContainer, .macosMinimizedWindowsContainer, .macosPopupWindowsContainer, .macosHiddenAppsWindowsContainer:
             return // Unconventional windows can't be moved with mouse
         case .tilingContainer:
-            moveTilingWindow(window)
+            await moveTilingWindow(window)
         case .unbound: return
     }
 }
@@ -47,7 +47,7 @@ private func moveFloatingWindow(_ window: Window) async throws {
 }
 
 @MainActor
-private func moveTilingWindow(_ window: Window) {
+private func moveTilingWindow(_ window: Window) async {
     currentlyManipulatedWithMouseWindowId = window.windowId
     window.lastAppliedLayoutPhysicalRect = nil
     let mouseLocation = mouseLocation
@@ -56,18 +56,46 @@ private func moveTilingWindow(_ window: Window) {
         .findWindowRecursively(in: targetWorkspace.rootTilingContainer, virtual: false, fullscreenCoversAll: false)?
         .takeIf { $0 != window }
     if targetWorkspace != window.nodeWorkspace { // Move window to a different monitor
-        let index: Int = if let swapTarget, let parent = swapTarget.parent as? TilingContainer, let targetRect = swapTarget.lastAppliedLayoutPhysicalRect {
-            mouseLocation.getProjection(parent.orientation) >= targetRect.center.getProjection(parent.orientation)
-                ? swapTarget.ownIndex.orDie() + 1
-                : swapTarget.ownIndex.orDie()
+        if await config.enableNormalizationBinaryTree {
+            // BSP mode: wrap the swap target and the dragged window in a new
+            // BSP-oriented container, so the split follows the swap target's
+            // aspect ratio rather than just inserting at an index.
+            if let swapTarget,
+               let parent = swapTarget.parent as? NonLeafTreeNodeObject
+            {
+                let bindingData = createBspWrapperForExistingAndNew(
+                    window,
+                    existingWindow: swapTarget,
+                    parent: parent,
+                    index: swapTarget.ownIndex.orDie(),
+                    adaptiveWeight: WEIGHT_AUTO,
+                )
+                window.bind(
+                    to: bindingData.parent,
+                    adaptiveWeight: bindingData.adaptiveWeight,
+                    index: bindingData.index,
+                )
+            } else {
+                window.bind(
+                    to: targetWorkspace.rootTilingContainer,
+                    adaptiveWeight: WEIGHT_AUTO,
+                    index: 0,
+                )
+            }
         } else {
-            0
+            let index: Int = if let swapTarget, let parent = swapTarget.parent as? TilingContainer, let targetRect = swapTarget.lastAppliedLayoutPhysicalRect {
+                mouseLocation.getProjection(parent.orientation) >= targetRect.center.getProjection(parent.orientation)
+                    ? swapTarget.ownIndex.orDie() + 1
+                    : swapTarget.ownIndex.orDie()
+            } else {
+                0
+            }
+            window.bind(
+                to: swapTarget?.parent ?? targetWorkspace.rootTilingContainer,
+                adaptiveWeight: WEIGHT_AUTO,
+                index: index,
+            )
         }
-        window.bind(
-            to: swapTarget?.parent ?? targetWorkspace.rootTilingContainer,
-            adaptiveWeight: WEIGHT_AUTO,
-            index: index,
-        )
     } else if let swapTarget {
         swapWindows(mruDominant: window, swapTarget)
     }
