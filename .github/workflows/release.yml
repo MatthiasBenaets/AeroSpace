@@ -7,25 +7,16 @@ permissions:
   contents: write
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Select latest available Xcode (need Xcode 26+ for Swift 6.2)
-        run: |
-          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
-          echo "Selecting $LATEST_XCODE"
-          sudo xcode-select -s "$LATEST_XCODE"
-          xcodebuild -version
-          swift --version
-
-      - name: Install build dependencies
-        run: |
-          brew install xcodegen rust bash fish ruby xcbeautify
+      - uses: actions/checkout@v6
+      - run: ./.github/gh-actions-runner-xcode-select.sh
+      - run: brew update && brew install bash fish xcbeautify swiftly xcodegen rust ruby
+      - run: swiftly init --skip-install --assume-yes --verbose && swiftly install
+      - run: swiftly run swift --version
 
       - name: Install Ruby gems for man pages
-        run: |
-          bundle install
+        run: bundle install
 
       - name: Extract version from tag
         id: version
@@ -38,7 +29,7 @@ jobs:
             --codesign-identity "-"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             .release/AeroSpace-v${{ steps.version.outputs.version }}.zip
